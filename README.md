@@ -7,9 +7,9 @@ version available which has no dependencies.
 This is a toy program. It is not meant to be used as it is for any serious purpose.
 The proxy acts like a client and a server at the same time. The server part listens
 to the specified port and waits for connections. At each request, the client part
-securely starts another connection to the DNS server, forwards the original request
-as it is, gets the response and send it back to the original requestor before closing
-the secure connection.
+starts a TLS connection to the DNS server, forwards the original request as it is,
+gets the response and send it back to the original requestor before closing the secure
+connection.
 
 ```bash
 with conn:
@@ -22,9 +22,9 @@ with conn:
 
 Python SSL module does certificate validation for us in the funcion `create_defaul_context()`.
 It chooses to trust the system's default CA certificates. I've added an extra layer of security
-pinning the server's public key to the proxy and decreasing the risk of MITM attacks with forged
-certificates. If one or several keys are pinned and none of them are used by the server, the
-proxy will exit with an error.
+pinning the server's public key and decreasing the risk of MITM attacks with forged certificates.
+If one or several keys are pinned and none of them are used by the server, the proxy will exit
+with an error.
 
 ## Basic usage
 You can start the proxy with the default configuration with
@@ -64,6 +64,12 @@ make run LOCAL_PORT=5353 EXTRA_VARS="-e LOCAL_HOST=10.0.0.1"
 
 If you know what you are doing, check the Makefile and run your own `docker run` commands.
 
+## Examples
+set extra env vars, for example, to use google servers:
+EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e SPKI=p83wULLjdmtlLA0xgsnLEJsbxPNY5JxiThviEON81z4="
+
+## Testing the proxy
+
 ## Security concerns
 - DNS resolution is a basic service for any computer system. It should allways run in HA mode,
 adding redundancy to avoid single points of failure.
@@ -75,7 +81,7 @@ like [sslabs.com](https://www.ssllabs.com/ssltest/analyze.html).
 of your choice.
 
 ## Microservice Architecture
-
+TODO
 
 ## Improvements
 - Add UDP support but keep TCP on the encrypted side
@@ -83,10 +89,3 @@ of your choice.
 - Keep the TLS connection alive, don't open/close it for each request
 - Accept more than one pinned public key. Expect at least one certificate in the certificate chain
 to contain a public key whose fingerprint is already known
-
-## Examples
-
-## Testing the proxy
-
-# set extra env vars, for example, to use google servers:
-# EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e SPKI=p83wULLjdmtlLA0xgsnLEJsbxPNY5JxiThviEON81z4="
