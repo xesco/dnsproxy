@@ -13,22 +13,22 @@ with conn:
     self.tlsconn.close().              # close encrypted connection
 ```
 
-Python SSL module does certificate validation for us in the funcion `create_defaul_context()`. It chooses to trust the system's default CA certificates. I've added an extra layer of security pinning the server's public key and decreasing the risk of MITM attacks with forged certificates. If one or several keys are pinned and none of them are used by the server, the proxy will exit with an error.
+Python SSL module does certificate validation for us in the funcion `create_defaul_context()`. By default the system's default CA certificates are trusted. The proxy uses an extra layer of security pinning the DNS Server's public key, decreasing the risk of MITM attacks with forged certificates. If one or several keys are pinned and none of them are used by the server, the proxy will exit with an error.
 
 ## Basic usage
 You can start the proxy with the default configuration with:
 ```bash
-$ pip install -r requirements.txt
-$ dnsproxy.py
+pip install -r requirements.txt
+dnsproxy.py
 ```
 
 If you want to use docker, there's a makefile to assist you. To run the proxy, just type:
 ```bash
-$ make run
+make run
 ```
 
 ## Changing default configuration
-Configuration is done in `settings.ini`, and environment variables of the same name (in capitals) have precedence over values defined there. There's a section for the local proxy and another section for the DNS-over-TLS server to use. The value `local_host=` sets the proxy to listen to all addresses in all interfaces. The other values are self explanatory. There's a small script in `utils/spki.sh` to extract the SPKI hash of a certificate. You can use it to configure the DNS server (check the examples).
+Configuration is done in `settings.ini` and environment variables of the same name (in capitals) have precedence over values defined there. There's a section for the local proxy and another section for the DNS-over-TLS server. The value `local_host=` sets the proxy to listen to all addresses in all interfaces. The other values are self explanatory. There's a small script in `utils/spki.sh` to extract the SPKI hash of a public key. You can use it to configure the DNS server (check the examples).
 
 ### With Python
 Just edit the `settings.ini` file.
@@ -67,19 +67,42 @@ Run using Google's DNS Server
 make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e SPKI=p83wULLjdmtlLA0xgsnLEJsbxPNY5JxiThviEON81z4="
 ```
 
+If you want to use your own modified docker image, you can build it with:
+```bash
+make build
+```
+
 ## Testing the proxy
+There is not an easy way to force your OS to use TCP for resolving DNS names (at least not in OSX). We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy at the port 5353, we could do:
+```bash
+dig -4 +tcp @localhost -p5353 -t MX n26.com
+1 aspmx.l.google.com.
+5 alt1.aspmx.l.google.com.
+5 alt2.aspmx.l.google.com.
+10 aspmx2.googlemail.com.
+10 aspmx3.googlemail.com.
+```
+Try to resolve any other type resource and convince yourself the proxy is working as expected. If you are using docker, you can check the output with `docker logs -f dnsproxy`:
+```bash
+Proxy started!
+Connected by ('172.17.0.1', 52922)
+Connected by ('172.17.0.1', 52926)
+Connected by ('172.17.0.1', 52930)
+...
+```
 
 ## Security concerns
 - DNS resolution is a basic service for any computer system. It should allways run in HA mode, adding redundancy to avoid single points of failure.
 - There's no point in proxying traffic to a encrypted DNS server if our internal network is not secure. Secure your netwok first.
-- Get the correct SPKI value. You can use the tool in `utils/spki.sh` or use an online tool like [sslabs.com](https://www.ssllabs.com/ssltest/analyze.html).
+- Get the correct SPKI value for your DNS server. You can use the tool in `utils/spki.sh` or use an online tool like [sslabs.com](https://www.ssllabs.com/ssltest/analyze.html).
 - Assuming you've done your homework, you service is as secure and reliable as is the DNS server of your choice.
 
 ## Microservice Architecture
-TODO
+You could use this proxy for any microservice which needed to resolve public Domain Names. Let's say our application is made of 20 different microservices running on containers.  which need DNS resolution.
 
 ## Improvements
 - Add UDP support but keep TCP on the encrypted side
 - Add suport for multiple requests at a time
 - Keep the TLS connection alive, don't open/close it for each request
 - Accept more than one pinned public key. Expect at least one certificate in the certificate chain to contain a public key whose fingerprint is already known.
+- Add support for multiple DNS Servers (fallback)
