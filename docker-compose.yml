@@ -1,0 +1,26 @@
+version: '3'
+services:
+  proxy:
+    build: .
+    networks:
+      static_net:
+        ipv4_address: 172.30.0.2
+    environment:
+      # force python to flush to stdout
+      - PYTHONUNBUFFERED=1
+  unbound:
+    image: mvance/unbound:latest
+    volumes:
+      - "./unbound:/opt/unbound/etc/unbound/"
+    ports: 
+      - "53:53/udp"
+    networks:
+      static_net:
+        ipv4_address: 172.30.0.3
+
+networks:
+  static_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

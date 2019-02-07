@@ -1,2 +1,7 @@
 *.swp
 .python-version
+
+# Unbound
+unbound/unbound.pid
+unbound/var/*
+unbound/dev/*
