@@ -16,7 +16,7 @@ with conn:
 Python SSL module does certificate validation for us in the funcion `create_defaul_context()`. By default the system's default CA certificates are trusted. The proxy uses an extra layer of security pinning the DNS Server's public key, decreasing the risk of MITM attacks with forged certificates. If one or several keys are pinned and none of them are used by the server, the proxy will exit with an error.
 
 ## Basic usage
-You can start the proxy with the default configuration with:
+You can start the proxy with the default configuration (tcp port 53) with:
 ```bash
 pip install -r requirements.txt
 dnsproxy.py
@@ -25,6 +25,11 @@ dnsproxy.py
 If you want to use docker, there's a makefile to assist you. To run the proxy, just type:
 ```bash
 make run
+```
+
+Because it's not easy to force your OS to use TCP for DNS resolution, there's also a docker-compose file which can be used for that. It starts `unbound` on UDP port 53 and forwards all traffic to our proxy. More about this in "Testing the proxy" section.
+```bash
+docker-compose up -d
 ```
 
 ## Changing default configuration
@@ -67,13 +72,13 @@ Run using Google's DNS Server
 make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e SPKI=p83wULLjdmtlLA0xgsnLEJsbxPNY5JxiThviEON81z4="
 ```
 
-If you want to use your own modified docker image, you can build it with:
+If you want to build you own docker image, you can do it with:
 ```bash
 make build
 ```
 
 ## Testing the proxy
-There is not an easy way to force your OS to use TCP for resolving DNS names (at least not in OSX). We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy at the port 5353, we could do:
+There is not an easy way to force your OS to use TCP for resolving DNS names (at least not in OSX). We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy on the port 5353, we could do:
 ```bash
 dig -4 +tcp @localhost -p5353 -t MX n26.com
 1 aspmx.l.google.com.
@@ -81,8 +86,9 @@ dig -4 +tcp @localhost -p5353 -t MX n26.com
 5 alt2.aspmx.l.google.com.
 10 aspmx2.googlemail.com.
 10 aspmx3.googlemail.com.
+
 ```
-Try to resolve any other type resource and convince yourself the proxy is working as expected. If you are using docker, you can check the output with `docker logs -f dnsproxy`:
+Try to resolve any other resource and convince yourself the proxy is working as expected. If you are using docker, you can check the output with `docker logs -f dnsproxy`:
 ```bash
 Proxy started!
 Connected by ('172.17.0.1', 52922)
@@ -91,18 +97,31 @@ Connected by ('172.17.0.1', 52930)
 ...
 ```
 
+### Testing with docker-compose
+You can start `unbound` and the `proxy` with `docker-compose up`. You can find `unbound` configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
+```bash
+tcp-upstream: yes              # use TCP
+harden-dnssec-stripped: no     # disable DNSSEC
+harden-below-nxdomain: no      # disable DNSSEC
+disable-dnssec-lame-check: yes # disable DNSSEC
+forward-tls-upstream: no       # do not use TLS
+forward-addr: 172.30.0.2@53    # forward requests to our proxy
+```
+You can configure your resolver to point to localhost and see the proxy in action. It's quite incredible such a little program can forward your DNS traffic without a problem. There's actually a lot going on: client => unbound => proxy => cloudflare => proxy => unbound => client.
+
 ## Security concerns
 - DNS resolution is a basic service for any computer system. It should allways run in HA mode, adding redundancy to avoid single points of failure.
 - There's no point in proxying traffic to a encrypted DNS server if our internal network is not secure. Secure your netwok first.
-- Get the correct SPKI value for your DNS server. You can use the tool in `utils/spki.sh` or use an online tool like [sslabs.com](https://www.ssllabs.com/ssltest/analyze.html).
-- Assuming you've done your homework, you service is as secure and reliable as is the DNS server of your choice.
+- Assuming you've done your homework, you service is as secure and reliable as is the DNS server of your choice (cloudflare, google, etc..)
+- We should be aware of the most common DNS attacks and protect agains them: DNS Flood Attack (DDoS), Cache Poisonig or DNS Redirection.
 
 ## Microservice Architecture
 You could use this proxy for any microservice which needed to resolve public Domain Names. Let's say our application is made of 20 different microservices running on containers.  which need DNS resolution.
 
 ## Improvements
 - Add UDP support but keep TCP on the encrypted side
+- Add Caching
 - Add suport for multiple requests at a time
-- Keep the TLS connection alive, don't open/close it for each request
-- Accept more than one pinned public key. Expect at least one certificate in the certificate chain to contain a public key whose fingerprint is already known.
 - Add support for multiple DNS Servers (fallback)
+- Accept more than one pinned public key per DNS server
+- Unpack requests/responses and add statistics

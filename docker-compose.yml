@@ -8,6 +8,9 @@ services:
     environment:
       # force python to flush to stdout
       - PYTHONUNBUFFERED=1
+      #- TLS_HOST=
+      #- TLS_PORT=
+      #- SPKI=
   unbound:
     image: mvance/unbound:latest
     volumes:
