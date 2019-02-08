@@ -27,7 +27,7 @@ If you want to use docker, there's a makefile to assist you. To run the proxy, j
 make run
 ```
 
-Because it's not easy to force your OS to use TCP for DNS resolution, there's also a docker-compose file which can be used for that. It starts `unbound` on UDP port 53 and forwards all DNS requests to our proxy. More about this in [Testing the proxy](#testing-section) section. To start the bundle:
+Because it's not easy to force your OS to use TCP for DNS resolution, there's also a docker-compose file which can be used for that. It starts `unbound` on UDP port 53 and forwards all DNS requests to our proxy. More about this in [Testing the proxy](#testing-the-proxy) section. To start the bundle:
 ```bash
 docker-compose up -d
 ```
@@ -77,7 +77,7 @@ Build you own docker image
 make build
 ```
 
-## <a name="testing-section"></a> Testing the proxy
+## Testing the proxy
 We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy on port 5353:
 ```bash
 dig -4 +tcp @localhost -p5353 -t MX n26.com
