@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import socket
 import configparser
+import selectors
+import socket
 import ssl
 import os
 
@@ -30,7 +31,7 @@ class TLSProxy:
         self.shost = shost  # remote server host
         self.sport = sport  # remote server port
         self.spki = spki    # remote public key hash
-        self.sock = None    # local socket
+        self.sel = selectors.DefaultSelector()
 
     def _get_public_key_hash(self):
         cert_pem = ssl.get_server_certificate((self.shost, self.sport))
@@ -43,35 +44,54 @@ class TLSProxy:
     def _server_listen(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((self.lhost, self.lport))
-        sock.listen(1)
-        self.sock = sock
+        sock.listen()
+        sock.setblocking(False)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        self.sel.register(sock, selectors.EVENT_READ, self.accept)
 
     # connect to remote server
     def _tls_connect(self):
         context = ssl.create_default_context()
         context = ssl.SSLContext()
-        conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5.0)
+        conn = context.wrap_socket(sock)
         conn.connect((self.shost, self.sport))
         return conn
     
     # check server's cert
     def _validate_cert(self):
         return self._get_public_key_hash() == self.spki
-    
-    def start(self, validate=False):
-        if validate and not self._validate_cert():
-            print("Public key does not match server's identity")
-        self._server_listen()
-        print("Proxy started!")
-        while True:
-            conn, addr = self.sock.accept()
+
+    def accept(self, sock, mask):
+        conn, addr = sock.accept()
+        print("opening", conn)
+        conn.setblocking(False)
+        self.sel.register(conn, selectors.EVENT_READ, self.read)
+
+    def read(self, conn, mask):
+        with conn:
             tlsconn = self._tls_connect()
-            print("Connected by ", addr)
-            with conn:
+            print('opening ssl', conn)
+            with tlsconn:
                 data = conn.recv(1024)
                 tlsconn.sendall(data)
                 conn.sendall(tlsconn.recv(1024))
-                tlsconn.close()
+                print('closing', tlsconn)
+                print('closing', conn)
+                self.sel.unregister(conn)
+    
+    def start(self, validate=False):
+        if validate and not self._validate_cert():
+          print("Public key does not match server's identity")
+        else:
+          print("Proxy started!")
+          self._server_listen()
+          while True:
+              events = self.sel.select()
+              for key, mask in events:
+                  callback = key.data
+                  callback(key.fileobj, mask)
 
 # entrypoint
 if __name__ == '__main__':

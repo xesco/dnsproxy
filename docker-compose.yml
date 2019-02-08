@@ -2,6 +2,8 @@ version: '3'
 services:
   proxy:
     build: .
+    image: xesco/dnsproxy
+    container_name: dnsproxy_bundle
     networks:
       static_net:
         ipv4_address: 172.30.0.2
@@ -20,6 +22,7 @@ services:
     networks:
       static_net:
         ipv4_address: 172.30.0.3
+    container_name: unbound_bundle
 
 networks:
   static_net:
