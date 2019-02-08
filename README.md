@@ -27,7 +27,7 @@ If you want to use docker, there's a makefile to assist you. To run the proxy, j
 make run
 ```
 
-Because it's not easy to force your OS to use TCP for DNS resolution, there's also a docker-compose file which can be used for that. It starts `unbound` on UDP port 53 and forwards all DNS requests to our proxy. More about this in [Testing the proxy](#testing-the-proxy) section. To start the bundle:
+Because it's not easy to force your OS to use TCP for DNS resolution, there's also a docker-compose file which can be used for that. It starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section. To start the proxy bundle:
 ```bash
 docker-compose up -d
 ```
@@ -72,13 +72,9 @@ Run using Google's DNS Server
 make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e SPKI=p83wULLjdmtlLA0xgsnLEJsbxPNY5JxiThviEON81z4="
 ```
 
-Build you own docker image
-```bash
-make build
-```
-
 ## Testing the proxy
 We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy on port 5353:
+
 ```bash
 dig -4 +tcp @localhost -p5353 -t MX n26.com
 1 aspmx.l.google.com.
@@ -88,8 +84,9 @@ dig -4 +tcp @localhost -p5353 -t MX n26.com
 10 aspmx3.googlemail.com.
 
 ```
-Try to resolve any other resource and convince yourself the proxy is working as expected. If you are using docker, you can check the output with `docker logs -f dnsproxy`:
+Try to resolve any other resource and convince yourself the proxy is working as expected. If you are using docker, check the logs with:
 ```bash
+docker logs -f dnsproxy
 Proxy started!
 Connected by ('172.17.0.1', 52922)
 Connected by ('172.17.0.1', 52926)
@@ -98,7 +95,7 @@ Connected by ('172.17.0.1', 52930)
 ```
 
 ### Testing with docker-compose
-You can start `unbound` and the `proxy` with `docker-compose up`. You can find `unbound` configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
+You can start `unbound` and the `proxy` with `docker-compose up`. You can find `unbound`'s configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
 ```bash
 tcp-upstream: yes              # use TCP
 harden-dnssec-stripped: no     # disable DNSSEC
@@ -108,7 +105,7 @@ forward-tls-upstream: no       # do not use TLS
 forward-addr: 172.30.0.2@53    # forward requests to our proxy, and comment all other servers
 ```
 
-Configure your resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing such a little program can forward all your DNS traffic without a problem. There's actually a lot going on: client => unbound => proxy => cloudflare => proxy => unbound => client.
+Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a little program can forward all your DNS traffic without a problem. That is what's going on: client =(UDP)=> unbound =(TCP)=> proxy =(TLS)=> DNS =(TLS)=> proxy =(TCP)=> unbound =(UDP)=> client.
 
 ## Security concerns
 - DNS resolution is a basic service for any computer system. It should allways run in high availability mode, adding redundancy to avoid single points of failure.
@@ -117,9 +114,10 @@ Configure your resolver to point to 127.0.0.1 and see the proxy in action. It's 
 - We should be aware of the most common DNS attacks and protect agains them: DNS Flood Attack (DDoS), Cache Poisonig or DNS Redirection.
 
 ## Microservice Architecture
+The proxy can be used as an internal resolver. It wouldn't make any sense to use it wide open on the Internet because anyone could sniff the unencrypted traffic from the clients to the proxy. In a microservice architecture services could be configured to send DNS requests to the proxy and we could have many of them in different regions and scale them up or down at will.
 
 ## Improvements
-- Add UDP support but keep TCP on the encrypted side
+- Add UDP support
 - Add Caching
 - Add suport for multiple requests at a time
 - Add support for multiple DNS Servers (fallback)
