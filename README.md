@@ -93,33 +93,35 @@ docker-compose up -d
 We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy on port 5353:
 
 ```bash
-dig -4 +tcp @localhost -p5353 -t MX n26.com
+dig -4 +tcp @localhost -p5353 -t MX n26.com +short
 1 aspmx.l.google.com.
 5 alt1.aspmx.l.google.com.
 5 alt2.aspmx.l.google.com.
 10 aspmx2.googlemail.com.
 10 aspmx3.googlemail.com.
 
-```
-Try to resolve any other resource and convince yourself the proxy is working as expected. If you are using docker, check the logs with:
-```bash
-docker logs -f dnsproxy
-Proxy started!
-Connected by ('172.17.0.1', 52922)
-Connected by ('172.17.0.1', 52926)
-Connected by ('172.17.0.1', 52930)
-...
-```
+dig -4 +tcp @localhost -p5353 -t NS n26.com +short
+amber.ns.cloudflare.com.
+theo.ns.cloudflare.com.
 
 ### Docker Compose
 You can start `unbound` and the `proxy` with `docker-compose up`. You can find `unbound`'s configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
 ```bash
-tcp-upstream: yes              # use TCP
-harden-dnssec-stripped: no     # disable DNSSEC
-harden-below-nxdomain: no      # disable DNSSEC
-disable-dnssec-lame-check: yes # disable DNSSEC
-forward-tls-upstream: no       # do not use TLS
-forward-addr: 172.30.0.2@53    # forward requests to our proxy, and comment all other servers
+tcp-upstream: yes             # use TCP
+forward-tls-upstream: no      # Do not use TLS to talk to the proxy
+forward-addr: 172.30.0.2@53   # forward requests to the proxy
+
+# Disable all other proxies
+# Cloudflare
+#forward-addr: 1.1.1.1@853#cloudflare-dns.com
+#forward-addr: 1.0.0.1@853#cloudflare-dns.com
+#forward-addr: 2606:4700:4700::1111@853#cloudflare-dns.com
+#forward-addr: 2606:4700:4700::1001@853#cloudflare-dns.com
+
+# CleanBrowsing
+#forward-addr: 185.228.168.9@853#security-filter-dns.cleanbrowsing.org
+#forward-addr: 185.228.169.9@853#security-filter-dns.cleanbrowsing.org
+....
 ```
 
 Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a small program can forward all your DNS traffic without any problems.

@@ -74,11 +74,11 @@ class DNSProxy:
             tlsconn = self._tls_connect()
             print('opening ssl', conn)
             with tlsconn:
-                data = conn.recv(1024)
+                data = conn.recv(4096)
                 try:
                     # forward request and get response
                     tlsconn.sendall(data)
-                    tlsdata = tlsconn.recv(1024)
+                    tlsdata = tlsconn.recv(4096)
                 except socket.error as ex:
                     # this might happen if tls socket times out
                     print("socket error", tlsconn, ex)
