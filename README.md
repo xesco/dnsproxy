@@ -94,11 +94,11 @@ We can use `dig` to check that our requests are being served as expected through
 
 ```bash
 dig -4 +tcp @localhost -p5353 -t MX n26.com +short
-1 aspmx.l.google.com.
-5 alt1.aspmx.l.google.com.
-5 alt2.aspmx.l.google.com.
-10 aspmx2.googlemail.com.
-10 aspmx3.googlemail.com.
+aspmx.l.google.com.
+alt1.aspmx.l.google.com.
+alt2.aspmx.l.google.com.
+aspmx2.googlemail.com.
+aspmx3.googlemail.com.
 
 dig -4 +tcp @localhost -p5353 -t NS n26.com +short
 amber.ns.cloudflare.com.
