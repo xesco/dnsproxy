@@ -4,6 +4,7 @@ import configparser
 import selectors
 import socket
 import ssl
+import sys
 import os
 
 from base64 import b64encode
@@ -18,27 +19,28 @@ def get_config(inifile):
       # check first for env var and fallback to ini file
       'lhost': os.environ.get('LOCAL_HOST',     config['LOCAL_SERVER']['local_host']),
       'lport': int(os.environ.get('LOCAL_PORT', config['LOCAL_SERVER']['local_port'])),
-      'shost': os.environ.get('TLS_HOST',       config['TLS_SERVER']['tls_host']),
-      'sport': int(os.environ.get('TLS_PORT',   config['TLS_SERVER']['tls_port'])),
+      'rhost': os.environ.get('TLS_HOST',       config['TLS_SERVER']['tls_host']),
+      'rport': int(os.environ.get('TLS_PORT',   config['TLS_SERVER']['tls_port'])),
       'spki': os.environ.get('SPKI',            config['TLS_SERVER']['spki']),
     }
 
 # main proxy class
-class TLSProxy:
-    def __init__(self, lhost, lport, shost, sport, spki=None):
+class DNSProxy:
+    def __init__(self, lhost, lport, rhost, rport, spki=None):
         self.lhost = lhost  # proxy host
         self.lport = lport  # proxy port
-        self.shost = shost  # remote server host
-        self.sport = sport  # remote server port
+        self.rhost = rhost  # remote server host
+        self.rport = rport  # remote server port
         self.spki = spki    # remote public key hash
         self.sel = selectors.DefaultSelector()
 
     def _get_public_key_hash(self):
-        cert_pem = ssl.get_server_certificate((self.shost, self.sport))
+        tls_host = (self.rhost, self.rport)
+        cert_pem = ssl.get_server_certificate(tls_host, ssl.PROTOCOL_TLSv1_2)
         cert_obj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
         pub_key = crypto.dump_publickey(crypto.FILETYPE_ASN1, cert_obj.get_pubkey())
         digest = sha256(pub_key).digest()
-        return b64encode(digest).decode('utf8')
+        return b64encode(digest).decode()
     
     # start local server
     def _server_listen(self):
@@ -53,10 +55,8 @@ class TLSProxy:
     def _tls_connect(self):
         context = ssl.create_default_context()
         context = ssl.SSLContext()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5.0)
-        conn = context.wrap_socket(sock)
-        conn.connect((self.shost, self.sport))
+        conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+        conn.connect((self.rhost, self.rport))
         return conn
     
     # check server's cert
@@ -75,26 +75,34 @@ class TLSProxy:
             print('opening ssl', conn)
             with tlsconn:
                 data = conn.recv(1024)
-                tlsconn.sendall(data)
-                conn.sendall(tlsconn.recv(1024))
-                print('closing', tlsconn)
-                print('closing', conn)
-                self.sel.unregister(conn)
+                try:
+                    # forward request and get response
+                    tlsconn.sendall(data)
+                    tlsdata = tlsconn.recv(1024)
+                except socket.error as ex:
+                    # this might happen if tls socket times out
+                    print("socket error", tlsconn, ex)
+                else:
+                    # send response back
+                    conn.sendall(tlsdata)
+                    self.sel.unregister(conn)
+                print('closing ssl', tlsconn)
+            print('closing', conn)
     
-    def start(self, validate=False):
+    def start(self, validate=True):
         if validate and not self._validate_cert():
-          print("Public key does not match server's identity")
+            print("Public key does not match server's identity")
         else:
-          print("Proxy started!")
-          self._server_listen()
-          while True:
-              events = self.sel.select()
-              for key, mask in events:
-                  callback = key.data
-                  callback(key.fileobj, mask)
+            print("Proxy started!")
+            self._server_listen()
+            while True:
+                events = self.sel.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
 
 # entrypoint
 if __name__ == '__main__':
     config = get_config('settings.ini')
-    proxy = TLSProxy(**config)
-    proxy.start(validate=True)
+    proxy = DNSProxy(**config)
+    proxy.start()

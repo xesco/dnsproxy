@@ -10,9 +10,10 @@ services:
     environment:
       # force python to flush to stdout
       - PYTHONUNBUFFERED=1
-      #- TLS_HOST=
-      #- TLS_PORT=
-      #- SPKI=
+      # config DNS server
+      #- TLS_HOST=8.8.8.8
+      #- TLS_PORT=853
+      #- SPKI=FNcRnNYYP/CkpIb/aXpjW4lOuAtfqLvWpXmCPbB72lk=
   unbound:
     image: mvance/unbound:latest
     volumes:

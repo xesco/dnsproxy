@@ -1,7 +1,12 @@
 #!/bin/bash
 
-URL="1.0.0.1"
-OUTCERT="cloudflare-dns.pem"
+if [ $# -ne 2 ]; then
+    echo "Use: spki.sh [ip|url] [outcert.pem]"
+    exit 1
+fi
+
+URL="${1}"
+OUTCERT="${2}"
 OUTSPKI="SPKI-${URL}"
 
 if [ ! -x $(command -v openssl) ]; then

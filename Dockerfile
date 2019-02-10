@@ -14,7 +14,9 @@ ENV TLS_HOST=$tls_host
 ENV TLS_PORT=$tls_port
 ENV SPKI=$spki
 
-COPY . .
+WORKDIR /opt/proxy
+COPY . /opt/proxy
+
 RUN apk update && apk upgrade
 RUN apk add --no-cache make gcc musl-dev libffi-dev openssl-dev
 RUN pip install --upgrade pip && pip install -r requirements.txt
