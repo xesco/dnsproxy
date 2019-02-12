@@ -1,16 +1,16 @@
 # DNSProxy: simple TCP to TLS DNS Proxy server 
-DNS proxy that listens to conventional DNS and sends it over TLS. The only requirement is `python3` and `pyOpenSSL`. There's a docker version available which has no dependencies besides docker and docker-compose.
+DNS proxy that recieves DNS requests and sends them over TLS. The only requirement is `python3` and `pyOpenSSL`. There's a docker version available which has no dependencies besides docker and docker-compose.
 
 ## Implementation
-This is a toy program. It is not meant to be used as it is for any serious purpose. The proxy acts as a client and as a server. The server waits for connections and at each request spawns a new TLS connection to the configured DNS Server, forwards the original request and sends the response back to the original requestor before closing the secure connection. The following is a simplified version of what's happining, in code:
+This is a toy program. It is not meant to be used as it is for any serious purpose. The proxy acts as a client and as a server. The server waits for connections and at each request spawns a new connection to a DNS/TLS Server, forwards the original request and sends the response back to the original client before closing the secure connection. The following is a simplified view of what is happining, in code:
 
 ```bash
 with conn:
     data = conn.recv(2048)             # get original request (plaintext)
-    self.tlsconn.sendall(data)         # send it to DNS Server (encrypted)
-    tlsdata = self.tlsconn.recv(2048)  # get response from DNS Server (encrypted)
+    self.tlsconn.sendall(data)         # forward to DNS/TLS Server (encrypted)
+    tlsdata = self.tlsconn.recv(2048)  # get response from DNS/TLS Server (encrypted)
     conn.sendall(tlsdata)              # send response to original client (plaintext)
-    self.tlsconn.close().              # close encrypted connection
+    self.tlsconn.close().              # close connection
 ```
 
 Python SSL module does certificate validation for us in the funcion `create_defaul_context()`. By default the system's default CA certificates are trusted. The proxy uses an extra layer of security pinning the DNS Server's public key, decreasing the risk of MITM attacks with forged certificates. If one or several keys are pinned and none of them are used by the server, the proxy will exit with an error.
@@ -19,21 +19,21 @@ Python SSL module does certificate validation for us in the funcion `create_defa
 You can start the proxy with the default configuration (TCP port 53) with:
 ```bash
 pip install -r requirements.txt
-dnsproxy.py
+./dnsproxy.py
 ```
 
-If you want to use docker, there's a makefile to assist you. To run the proxy, just type:
+If you prefer to use docker, there is a makefile to assist you. To run the proxy, just type:
 ```bash
 make run
 ```
 
-Because it's not easy to force your OS to use TCP for DNS resolution, there's a docker-compose file which can be used for that. It starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section. To start the proxy bundle:
+Because it is not easy to force your OS to use TCP for DNS resolution, there's a docker-compose file that starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section. To start the proxy bundle:
 ```bash
 docker-compose up -d
 ```
 
 ## Changing default configuration
-Configuration is done in `settings.ini` and environment variables of the same name (in capitals) have precedence over values defined in the ini file. There's a section for the proxy and another section for the DNS server. The value `local_host=` sets the proxy to listen to all addresses in all interfaces. The other values are self explanatory. There's a small script in `utils/spki.sh` to extract the SPKI hash of a public key. You can use it to configure an alternative DNS server (check the examples below).
+Configuration is done in `settings.ini` and environment variables of the same name (in capitals) have precedence over values defined in the ini file. There is a section for the proxy and another section for the DNS server. The value `local_host=` sets the proxy to listen to all interfaces. The other values are self explanatory. There is a small script in `utils/spki.sh` to extract the SPKI hash of a public key. You can use it to configure an alternative DNS server (check the examples below).
 
 ### Python
 Just edit the `settings.ini` file.
@@ -74,7 +74,7 @@ make run LOCAL_PORT=5353
 
 Run using a local and remote alternative ports
 ```bash
-make run LOCAL_PORT=5353 EXTRA_VARS="-e TLS_PORT=5353"
+make run LOCAL_PORT=5353 EXTRA_VARS="-e TLS_PORT=8553"
 ```
 
 Run using Google's DNS Server
@@ -90,7 +90,7 @@ docker-compose up -d
 ## Testing the proxy
 
 ### Python and Docker
-We can use `dig` to check that our requests are being served as expected through the proxy. For example, let's say we started the proxy on port 5353:
+Use `dig` to check that requests are being served as expected through the proxy. For example, let's say we started the proxy on port 5353:
 
 ```bash
 dig -4 +tcp @localhost -p5353 -t MX n26.com +short
@@ -105,7 +105,7 @@ amber.ns.cloudflare.com.
 theo.ns.cloudflare.com.
 
 ### Docker Compose
-You can start `unbound` and the `proxy` with `docker-compose up`. You can find `unbound`'s configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
+Start `unbound` and the `proxy` with `docker-compose up -d`. You can find `unbound`'s configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
 ```bash
 tcp-upstream: yes             # use TCP
 forward-tls-upstream: no      # Do not use TLS to talk to the proxy
@@ -121,24 +121,23 @@ forward-addr: 172.30.0.2@53   # forward requests to the proxy
 # CleanBrowsing
 #forward-addr: 185.228.168.9@853#security-filter-dns.cleanbrowsing.org
 #forward-addr: 185.228.169.9@853#security-filter-dns.cleanbrowsing.org
-....
 ```
 
 Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a small program can forward all your DNS traffic without any problems.
 
 ## Security concerns
 - DNS resolution is a basic service for any computer system. It should allways run in high availability mode, adding redundancy to avoid single points of failure.
-- There's no point in proxying traffic to an encrypted DNS server if our internal network is not secure. Secure your netwok first.
+- There is no point in proxying traffic to an encrypted DNS server if our internal network is not secure. Secure your netwok first.
 - Assuming you've done your homework, you service is as secure and reliable as is the DNS server of your choice i.e. Cloudflare, Google, etc..
 - Be aware of the most common DNS attacks and protect agains them: DNS Flood Attack (DDoS), Cache Poisonig or DNS Redirection.
 
 ## Microservice Architecture
-The proxy can be used as an internal resolver. It wouldn't make any sense to use it wide open on the Internet because anyone could sniff the unencrypted traffic from the clients to the proxy. In a microservice architecture services could be configured to send DNS requests to the proxy and we could have many of them in different regions and scale them up or down on demand.
+The proxy could be used as an internal resolver. It wouldn't make any sense to use it wide open on the Internet because anyone could sniff the unencrypted traffic from the clients to the proxy. In a microservice architecture services could be configured to send DNS requests to the proxy and we could have many of them in different regions and scale them up or down on demand.
 
 ## Improvements
 - Add UDP support
 - Add Caching
 - Add suport for multiple requests at a time <= DONE!
-- Add support for multiple DNS Servers (fallback)
+- Add support for multiple DNS Servers (fallback, round robin)
 - Sniff requests/responses and add statistics
 - Add suport for TLS from client to proxy
