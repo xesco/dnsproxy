@@ -103,6 +103,7 @@ aspmx3.googlemail.com.
 dig -4 +tcp @localhost -p5353 -t NS n26.com +short
 amber.ns.cloudflare.com.
 theo.ns.cloudflare.com.
+```
 
 ### Docker Compose
 Start `unbound` and the `proxy` with `docker-compose up -d`. You can find `unbound`'s configuration at `./unbound/unbound.conf. The most relevant changes to make it work with the proxy are:
