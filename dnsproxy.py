@@ -48,7 +48,6 @@ class DNSProxy:
         sock.bind((self.lhost, self.lport))
         sock.listen()
         sock.setblocking(False)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.sel.register(sock, selectors.EVENT_READ, self.accept)
 
     # connect to remote server
@@ -75,19 +74,14 @@ class DNSProxy:
             print('opening ssl', conn)
             with tlsconn:
                 data = conn.recv(4096)
-                try:
-                    # forward request and get response
-                    tlsconn.sendall(data)
-                    tlsdata = tlsconn.recv(4096)
-                except socket.error as ex:
-                    # this might happen if tls socket times out
-                    print("socket error", tlsconn, ex)
-                else:
-                    # send response back
-                    conn.sendall(tlsdata)
-                    self.sel.unregister(conn)
+                # forward request and get response
+                tlsconn.sendall(data)
+                tlsdata = tlsconn.recv(4096)
+                # send response back
+                conn.sendall(tlsdata)
                 print('closing ssl', tlsconn)
             print('closing', conn)
+        self.sel.unregister(conn)
     
     def start(self, validate=True):
         if validate and not self._validate_cert():
