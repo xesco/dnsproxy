@@ -112,7 +112,7 @@ tcp-upstream: yes             # use TCP
 forward-tls-upstream: no      # Do not use TLS to talk to the proxy
 forward-addr: 172.30.0.2@53   # forward requests to the proxy
 
-# Disable all other proxies
+# Disable all other servers
 # Cloudflare
 #forward-addr: 1.1.1.1@853#cloudflare-dns.com
 #forward-addr: 1.0.0.1@853#cloudflare-dns.com

@@ -2,7 +2,7 @@ version: '3'
 services:
   proxy:
     build: .
-    image: xesco/dnsproxy
+    image: dnsproxy
     container_name: dnsproxy_bundle
     networks:
       static_net:
