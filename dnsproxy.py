@@ -59,30 +59,30 @@ class DNSProxy:
         conn.setblocking(False)
         self.sel.register(conn, selectors.EVENT_READ, self.read)
 
+    # registered for connection event read
+    def read(self, conn):
+        with conn:
+            data = conn.recv(4096)
+            tls_conn = self.tls_connect()
+            print('opening ssl', conn)
+            with tls_conn:
+                # forward request and get response
+                tls_conn.sendall(data)
+                ssl_data = tls_conn.recv(4096)
+                # send response back
+                conn.sendall(ssl_data)
+                print('closing ssl', tls_conn)
+            print('closing', conn)
+        self.sel.unregister(conn)
+
     # connect to remote server
     def tls_connect(self):
         context = ssl.create_default_context()
         context = ssl.SSLContext()
-        ssl_conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
-        ssl_conn.connect((self.rhost, self.rport))
-        return ssl_conn
+        tls_conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+        tls_conn.connect((self.rhost, self.rport))
+        return tls_conn
 
-    # registered for connection event read
-    def read(self, conn):
-        with conn:
-            tlsconn = self.tls_connect()
-            print('opening ssl', conn)
-            with tlsconn:
-                data = conn.recv(4096)
-                # forward request and get response
-                tlsconn.sendall(data)
-                tlsdata = tlsconn.recv(4096)
-                # send response back
-                conn.sendall(tlsdata)
-                print('closing ssl', tlsconn)
-            print('closing', conn)
-        self.sel.unregister(conn)
-    
     def start(self, validate=True):
         if validate and not self.validate_cert():
             print("Public key does not match server's identity")
@@ -91,13 +91,10 @@ class DNSProxy:
         self.server_listen()
         print("Proxy started!")
         while True:
-            # block until monitored connection becomes ready
+            # block until some connection becomes ready
             for key, mask in self.sel.select():
-                if mask == selectors.EVENT_READ:
-                    callback = key.data
-                    callback(key.fileobj)
-                if mask == selectors.EVENT_WRITE:
-                    pass
+                callback = key.data
+                callback(key.fileobj)
 
 # main
 if __name__ == '__main__':
