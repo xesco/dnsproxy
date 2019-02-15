@@ -42,6 +42,9 @@ class DNSProxy:
         digest = sha256(pub_key).digest()
         return b64encode(digest).decode()
     
+    def validate_cert(self):
+        return self.get_public_key_hash() == self.spki
+
     def server_listen(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((self.lhost, self.lport))
@@ -49,24 +52,20 @@ class DNSProxy:
         sock.setblocking(False)
         self.sel.register(sock, selectors.EVENT_READ, self.accept)
 
-    # connect to remote server
-    def tls_connect(self):
-        context = ssl.create_default_context()
-        context = ssl.SSLContext()
-        conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
-        conn.connect((self.rhost, self.rport))
-        return conn
-    
-    # check server's cert
-    def _validate_cert(self):
-        return self.get_public_key_hash() == self.spki
-
     # registered for socket event read
     def accept(self, sock):
         conn, addr = sock.accept()
         print("opening", conn)
         conn.setblocking(False)
         self.sel.register(conn, selectors.EVENT_READ, self.read)
+
+    # connect to remote server
+    def tls_connect(self):
+        context = ssl.create_default_context()
+        context = ssl.SSLContext()
+        ssl_conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+        ssl_conn.connect((self.rhost, self.rport))
+        return ssl_conn
 
     # registered for connection event read
     def read(self, conn):
@@ -85,18 +84,22 @@ class DNSProxy:
         self.sel.unregister(conn)
     
     def start(self, validate=True):
-        if validate and not self._validate_cert():
+        if validate and not self.validate_cert():
             print("Public key does not match server's identity")
-        else:
-            print("Proxy started!")
-            self.server_listen()
-            while True:
-                events = self.sel.select()
-                for key, mask in events:
+            sys.exit(127)
+
+        self.server_listen()
+        print("Proxy started!")
+        while True:
+            # block until monitored connection becomes ready
+            for key, mask in self.sel.select():
+                if mask == selectors.EVENT_READ:
                     callback = key.data
                     callback(key.fileobj)
+                if mask == selectors.EVENT_WRITE:
+                    pass
 
-# entrypoint
+# main
 if __name__ == '__main__':
     config = get_config('settings.ini')
     proxy = DNSProxy(**config)
