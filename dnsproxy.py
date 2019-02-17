@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import configparser
+import os
 import selectors
 import socket
 import ssl
 import sys
-import os
 
 from base64 import b64encode
 from hashlib import sha256
@@ -64,16 +64,16 @@ class DNSProxy:
         with conn:
             data = conn.recv(4096)
             tls_conn = self.tls_connect()
-            print('opening ssl', conn)
+            print('opening', conn)
             with tls_conn:
                 # forward request and get response
                 tls_conn.sendall(data)
                 ssl_data = tls_conn.recv(4096)
                 # send response back
                 conn.sendall(ssl_data)
-                print('closing ssl', tls_conn)
+                print('closing', tls_conn)
             print('closing', conn)
-        self.sel.unregister(conn)
+            self.sel.unregister(conn)
 
     # connect to remote server
     def tls_connect(self):
@@ -94,7 +94,10 @@ class DNSProxy:
             # block until some connection becomes ready
             for key, mask in self.sel.select():
                 callback = key.data
-                callback(key.fileobj)
+                try:
+                    callback(key.fileobj)
+                except Exception as ex:
+                    print(ex)
 
 # main
 if __name__ == '__main__':
