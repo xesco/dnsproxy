@@ -1,5 +1,5 @@
 # DNSProxy: simple TCP to TLS DNS Proxy server 
-DNS proxy that recieves DNS requests and sends them over TLS. The only requirement is `python3` and `pyOpenSSL. There's a docker version available which has no dependencies besides docker and docker-compose.
+DNS proxy that recieves DNS requests and sends them over TLS. The only requirement is `python3` and `pyOpenSSL`. There's a docker version available which has no dependencies besides docker and docker-compose.
 
 ## Implementation
 This is a toy program. It is not designed to be used as it is for any serious purpose. The proxy acts as a client and as a server. The server waits for connections and at each request spawns a new tls connection to the DNS Server, forwards the original request and sends the response back to the client before closing all connections. The following is a simplified view of what is happining behind the scenes:
@@ -82,13 +82,13 @@ make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e TLS_HOSTNAME=dns.google -e SPKI=CMNC
 ```
 
 ### Docker Compose
-Because it is not easy to force your OS to use TCP for DNS resolution, there's a docker-compose file that starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section.
+Because it is not easy to force your OS to use TCP for DNS resolution, there's a `docker-compose` file that starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section.
 
 To start the proxy bundle with compose:
 ```bash
 docker-compose up -d
 ```
-Change settings in the `environment` section of the proxy service in the docker-compose file. For example, to use Google's DNS server:
+Change settings in the `environment` section of the `proxy` service in the `docker-compose` file. For example, to use Google's DNS server:
 ```bash
 environment:
   # force python to flush to stdout
@@ -116,7 +116,7 @@ dig -4 +tcp @localhost -p5353 -t NS n26.com +short
 amber.ns.cloudflare.com.
 theo.ns.cloudflare.com.
 ```
-You can check containers log with:
+With docker, you can check the log with:
 ```bash
 docker logs -f dnsproxy
 conn ('172.17.0.1', 49834) => ('172.17.0.2', 53)
@@ -149,7 +149,7 @@ forward-addr: 172.30.0.2@53   # forward requests to the proxy
 #forward-addr: 185.228.169.9@853#security-filter-dns.cleanbrowsing.org
 ```
 
-Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a small program can forward all your DNS traffic without any problems. Be aware `unbound caches results and there won't be any output on the logs when querying the same data twice.
+Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a small program can forward all your DNS traffic without any problems. Be aware `unbound` caches results and there won't be any output on the logs when querying the same data twice.
 
 ```bash
 docker-compose-up -d
