@@ -10,10 +10,11 @@ services:
     environment:
       # force python to flush to stdout
       - PYTHONUNBUFFERED=1
-      # config DNS server
+      # config different DNS server (for example Google's public DNS)
       #- TLS_HOST=8.8.8.8
       #- TLS_PORT=853
-      #- SPKI=FNcRnNYYP/CkpIb/aXpjW4lOuAtfqLvWpXmCPbB72lk=
+      #- TLS_HOSTNAME=dns.google
+      #- SPKI=CMNCN/AHEjKF27em8W59P9f4vBarFbB5VFPvV6UfQbQ=
   unbound:
     image: mvance/unbound:latest
     volumes:

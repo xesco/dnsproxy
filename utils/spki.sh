@@ -19,8 +19,13 @@ openssl s_client -showcerts -connect ${URL}:853 </dev/null 2>/dev/null | \
 openssl x509 -outform PEM > ${OUTCERT}
 echo "ok!"
 
+echo -n "Getting CN..."
+openssl x509 -in ${OUTCERT} -text -noout | \
+grep "Subject:" | awk '{ print $NF }' > ${OUTSPKI}
+echo "ok!"
+
 echo -n "Generating fingerprint for ${OUTCERT}..."
 openssl x509 -in ${OUTCERT} -pubkey -noout | \
 openssl pkey -pubin -outform der | \
-openssl dgst -sha256 -binary | openssl enc -base64 > ${OUTSPKI}
+openssl dgst -sha256 -binary | openssl enc -base64 >> ${OUTSPKI}
 echo "ok!"

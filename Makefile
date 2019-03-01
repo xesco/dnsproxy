@@ -4,7 +4,6 @@ EXTRA_VARS=
 
 .PHONY: build
 .PHONY: run
-.PHONY: clean
 
 build:
 	docker build -t $(APP_NAME) .

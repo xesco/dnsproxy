@@ -11,43 +11,46 @@ from base64 import b64encode
 from hashlib import sha256
 from OpenSSL import crypto
 
-# get config from ENV or fallback to ini file
 def get_config(inifile):
     config = configparser.ConfigParser()
     config.read(inifile)
-    return {
-      # check first for env var and fallback to ini file
-      'lhost': os.environ.get('LOCAL_HOST',     config['LOCAL_SERVER']['local_host']),
-      'lport': int(os.environ.get('LOCAL_PORT', config['LOCAL_SERVER']['local_port'])),
-      'rhost': os.environ.get('TLS_HOST',       config['TLS_SERVER']['tls_host']),
-      'rport': int(os.environ.get('TLS_PORT',   config['TLS_SERVER']['tls_port'])),
-      'spki': os.environ.get('SPKI',            config['TLS_SERVER']['spki']),
+    # check first for env var and fallback to ini file
+    return { 
+        k: os.environ.get(k.upper(), v) \
+            for section  in config.values() \
+                for k, v in section.items() 
     }
 
-# main proxy class
+# proxy class
 class DNSProxy:
-    def __init__(self, lhost, lport, rhost, rport, spki=None):
-        self.lhost = lhost  # proxy host
-        self.lport = lport  # proxy port
-        self.rhost = rhost  # remote host
-        self.rport = rport  # remote port
-        self.spki = spki    # remote public key hash
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+        # check https://docs.python.org/3/library/selectors.html
         self.sel = selectors.DefaultSelector()
 
     def get_public_key_hash(self):
-        tls_host = (self.rhost, self.rport)
+        tls_host = (self.tls_host, int(self.tls_port))
         cert_pem = ssl.get_server_certificate(tls_host, ssl.PROTOCOL_TLSv1_2)
         cert_obj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
-        pub_key = crypto.dump_publickey(crypto.FILETYPE_ASN1, cert_obj.get_pubkey())
-        digest = sha256(pub_key).digest()
+        pub_key  = crypto.dump_publickey(crypto.FILETYPE_ASN1, cert_obj.get_pubkey())
+        digest   = sha256(pub_key).digest()
         return b64encode(digest).decode()
+
+    def server_info(self):
+        print(f"Local host: *")
+        print(f"Local port: {self.local_port}")
+        print(f"Remote host: {self.tls_host}")
+        print(f"Remote port: {self.tls_port}")
+        print(f"Remote hostname: {self.tls_hostname}")
     
     def validate_cert(self):
         return self.get_public_key_hash() == self.spki
 
     def server_listen(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind((self.lhost, self.lport))
+        sock.bind((self.local_host, int(self.local_port)))
         sock.listen()
         sock.setblocking(False)
         self.sel.register(sock, selectors.EVENT_READ, self.accept)
@@ -55,32 +58,30 @@ class DNSProxy:
     # registered for socket event read
     def accept(self, sock):
         conn, addr = sock.accept()
-        print("opening", conn)
+        print(f"conn {conn.getpeername()} => {conn.getsockname()}")
         conn.setblocking(False)
         self.sel.register(conn, selectors.EVENT_READ, self.read)
 
     # registered for connection event read
     def read(self, conn):
         with conn:
-            data = conn.recv(4096)
             tls_conn = self.tls_connect()
-            print('opening', conn)
+            print(f"tls conn {tls_conn.getsockname()} => {tls_conn.getpeername()}")
             with tls_conn:
                 # forward request and get response
-                tls_conn.sendall(data)
-                ssl_data = tls_conn.recv(4096)
+                tls_conn.sendall(conn.recv(4096))
                 # send response back
-                conn.sendall(ssl_data)
-                print('closing', tls_conn)
-            print('closing', conn)
+                conn.sendall(tls_conn.recv(4096))
+                print("tls conn closed")
+            print("conn closed")
             self.sel.unregister(conn)
 
     # connect to remote server
     def tls_connect(self):
         context = ssl.create_default_context()
-        context = ssl.SSLContext()
-        tls_conn = context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
-        tls_conn.connect((self.rhost, self.rport))
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tls_conn = context.wrap_socket(s, server_hostname=self.tls_hostname)
+        tls_conn.connect((self.tls_host, int(self.tls_port)))
         return tls_conn
 
     def start(self, validate=True):
@@ -96,6 +97,7 @@ class DNSProxy:
                 callback = key.data
                 try:
                     callback(key.fileobj)
+                # never die
                 except Exception as ex:
                     print(ex)
 
@@ -103,4 +105,5 @@ class DNSProxy:
 if __name__ == '__main__':
     config = get_config('settings.ini')
     proxy = DNSProxy(**config)
+    proxy.server_info()
     proxy.start()
