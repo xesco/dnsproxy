@@ -78,7 +78,7 @@ make run LOCAL_PORT=5353 EXTRA_VARS="-e LOCAL_HOST=10.0.0.1"
 ```
 Run using Google's DNS Server
 ```bash
-make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e TLS_HOSTNAME=dns.google -e SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI=
+make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e TLS_HOSTNAME=dns.google -e SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI="
 ```
 
 ### Docker Compose
