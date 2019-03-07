@@ -78,7 +78,7 @@ make run LOCAL_PORT=5353 EXTRA_VARS="-e LOCAL_HOST=10.0.0.1"
 ```
 Run using Google's DNS Server
 ```bash
-make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e TLS_HOSTNAME=dns.google -e SPKI=CMNCN/AHEjKF27em8W59P9f4vBarFbB5VFPvV6UfQbQ="
+make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e TLS_HOSTNAME=dns.google -e SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI=
 ```
 
 ### Docker Compose
@@ -97,7 +97,7 @@ environment:
   - TLS_HOST=8.8.8.8
   - TLS_PORT=853
   - TLS_HOSTNAME=dns.google
-  - SPKI=CMNCN/AHEjKF27em8W59P9f4vBarFbB5VFPvV6UfQbQ=
+  - SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI=
 ```
 
 ## Testing the proxy

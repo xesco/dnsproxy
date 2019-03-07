@@ -26,7 +26,6 @@ class DNSProxy:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
-
         # check https://docs.python.org/3/library/selectors.html
         self.sel = selectors.DefaultSelector()
 
@@ -88,7 +87,6 @@ class DNSProxy:
         if validate and not self.validate_cert():
             print("Public key does not match server's identity")
             sys.exit(127)
-
         self.server_listen()
         print("Proxy started!")
         while True:

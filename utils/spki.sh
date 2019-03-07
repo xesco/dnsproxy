@@ -15,7 +15,7 @@ if [ ! -x $(command -v openssl) ]; then
 fi
 
 echo -n "Getting certificate from ${URL}..."
-openssl s_client -showcerts -connect ${URL}:853 </dev/null 2>/dev/null | \
+openssl s_client -showcerts -connect ${URL}:853 -tls1_2 </dev/null 2>/dev/null | \
 openssl x509 -outform PEM > ${OUTCERT}
 echo "ok!"
 
