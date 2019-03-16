@@ -20,8 +20,7 @@ openssl x509 -outform PEM > ${OUTCERT}
 echo "ok!"
 
 echo -n "Getting CN..."
-openssl x509 -in ${OUTCERT} -text -noout | \
-grep "Subject:" | awk '{ print $NF }' > ${OUTSPKI}
+openssl x509 -in ${OUTCERT} -subject -noout | awk '{ print $NF }' > ${OUTSPKI}
 echo "ok!"
 
 echo -n "Generating fingerprint for ${OUTCERT}..."
