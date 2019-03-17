@@ -52,7 +52,7 @@ Or set up custom config values through env variables:
 export LOCAL_PORT=5050
 export TLS_HOST=8.8.8.8
 export TLS_HOSTNAME=dns.google
-export SKPI=CMNCN/AHEjKF27em8W59P9f4vBarFbB5VFPvV6UfQbQ=
+export SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI=
 ./dnsproxy
 Local host: *
 Local port: 5050

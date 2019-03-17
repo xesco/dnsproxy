@@ -15,10 +15,11 @@ def get_config(inifile):
     config = configparser.ConfigParser()
     config.read(inifile)
     # check first for env var and fallback to ini file
-    return 
-        { k: os.environ.get(k.upper(), v) \
-          for section  in config.values() \
-          for k, v in section.items() }
+    return { 
+        k: os.environ.get(k.upper(), v) \
+        for section  in config.values() \
+        for k, v in section.items()
+    }
 
 # proxy class
 class DNSProxy:
