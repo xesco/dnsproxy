@@ -5,3 +5,6 @@
 unbound/unbound.pid
 unbound/var/*
 unbound/dev/*
+
+# venv
+.env
