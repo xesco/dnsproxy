@@ -1,0 +1,2 @@
+- Make TLS version configurable
+- Reuse TLS connection

@@ -21,12 +21,26 @@ def get_config(inifile):
         for k, v in section.items()
     }
 
+def recvall(sock, bufflen):
+    data = bytearray()
+    while True:
+        part = sock.recv(bufflen)
+        data.extend(part)
+        if len(part) < bufflen:
+            # either 0 or end of data
+            break
+    return data
+
 # proxy class
 class DNSProxy:
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
+    def __init__(self, config):
+        for k, v in config.items():
             setattr(self, k, v)
-        # check https://docs.python.org/3/library/selectors.html
+
+        self.bufflen = int(self.conn_bufflen)
+        self.local_server  = (self.local_host, int(self.local_port))
+        self.remote_server = (self.tls_host, int(self.tls_port))
+        # https://docs.python.org/3/library/selectors.html
         self.sel = selectors.DefaultSelector()
 
     def get_public_key_hash(self):
@@ -45,11 +59,11 @@ class DNSProxy:
         print(f"Remote hostname: {self.tls_hostname}")
     
     def validate_cert(self):
-        return self.get_public_key_hash() == self.spki
+        return self.get_public_key_hash() == self.tls_spki
 
     def server_listen(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind((self.local_host, int(self.local_port)))
+        sock.bind(self.local_server)
         sock.listen()
         sock.setblocking(False)
         self.sel.register(sock, selectors.EVENT_READ, self.accept)
@@ -68,11 +82,9 @@ class DNSProxy:
             print(f"tls conn {tls_conn.getsockname()} => {tls_conn.getpeername()}")
             with tls_conn:
                 # forward request and get response
-                tls_conn.sendall(conn.recv(4096))
+                tls_conn.sendall(recvall(conn, self.bufflen))
                 # send response back
-                conn.sendall(tls_conn.recv(4096))
-                print("tls conn closed")
-            print("conn closed")
+                conn.sendall(recvall(tls_conn, self.bufflen))
             self.sel.unregister(conn)
 
     # connect to remote server
@@ -80,13 +92,14 @@ class DNSProxy:
         context = ssl.create_default_context()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tls_conn = context.wrap_socket(s, server_hostname=self.tls_hostname)
-        tls_conn.connect((self.tls_host, int(self.tls_port)))
+        tls_conn.connect(self.remote_server)
         return tls_conn
 
     def start(self, validate=True):
         if validate and not self.validate_cert():
             print("Public key does not match server's identity")
             sys.exit(127)
+
         self.server_listen()
         print("Proxy started!")
         while True:
@@ -102,6 +115,6 @@ class DNSProxy:
 # main
 if __name__ == '__main__':
     config = get_config('settings.ini')
-    proxy = DNSProxy(**config)
+    proxy = DNSProxy(config)
     proxy.server_info()
     proxy.start()
