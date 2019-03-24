@@ -6,42 +6,23 @@ import selectors
 import socket
 import ssl
 import sys
+import traceback
 
 from base64 import b64encode
 from hashlib import sha256
 from OpenSSL import crypto
-
-def get_config(inifile):
-    config = configparser.ConfigParser()
-    config.read(inifile)
-    # check first for env var and fallback to ini file
-    return { 
-        k: os.environ.get(k.upper(), v) \
-        for section  in config.values() \
-        for k, v in section.items()
-    }
-
-def recvall(sock, bufflen):
-    data = bytearray()
-    while True:
-        part = sock.recv(bufflen)
-        data.extend(part)
-        if len(part) < bufflen:
-            # either 0 or end of data
-            break
-    return data
 
 # proxy class
 class DNSProxy:
     def __init__(self, config):
         for k, v in config.items():
             setattr(self, k, v)
-
-        self.bufflen = int(self.conn_bufflen)
+        self.bufflen       = int(self.conn_bufflen)
         self.local_server  = (self.local_host, int(self.local_port))
         self.remote_server = (self.tls_host, int(self.tls_port))
-        # https://docs.python.org/3/library/selectors.html
-        self.sel = selectors.DefaultSelector()
+        self.local_host    = self.local_host or "localhost"
+        self.sel           = selectors.DefaultSelector()
+        self.tls_conn      = tls_connect(self.tls_hostname, self.remote_server)
 
     def get_public_key_hash(self):
         tls_host = (self.tls_host, int(self.tls_port))
@@ -52,7 +33,7 @@ class DNSProxy:
         return b64encode(digest).decode()
 
     def server_info(self):
-        print(f"Local host: *")
+        print(f"Local host: {self.local_host}")
         print(f"Local port: {self.local_port}")
         print(f"Remote host: {self.tls_host}")
         print(f"Remote port: {self.tls_port}")
@@ -78,22 +59,12 @@ class DNSProxy:
     # registered for connection event read
     def read(self, conn):
         with conn:
-            tls_conn = self.tls_connect()
-            print(f"tls conn {tls_conn.getsockname()} => {tls_conn.getpeername()}")
-            with tls_conn:
-                # forward request and get response
-                tls_conn.sendall(recvall(conn, self.bufflen))
-                # send response back
-                conn.sendall(recvall(tls_conn, self.bufflen))
+            print(f"tls conn {self.tls_conn.getsockname()} => {self.tls_conn.getpeername()}")
+            # forward request and get response
+            self.tls_conn.sendall(recvall(conn, self.bufflen))
+            # send response back
+            conn.sendall(recvall(self.tls_conn, self.bufflen))
             self.sel.unregister(conn)
-
-    # connect to remote server
-    def tls_connect(self):
-        context = ssl.create_default_context()
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tls_conn = context.wrap_socket(s, server_hostname=self.tls_hostname)
-        tls_conn.connect(self.remote_server)
-        return tls_conn
 
     def start(self, validate=True):
         if validate and not self.validate_cert():
@@ -111,6 +82,57 @@ class DNSProxy:
                 # never die
                 except Exception as ex:
                     print(ex)
+                    traceback.print_exc(file=sys.stdout)
+
+def get_config(inifile):
+    config = configparser.ConfigParser()
+    config.read(inifile)
+    # check first for env var and fallback to ini file
+    return { 
+        k: os.environ.get(k.upper(), v) \
+        for section  in config.values() \
+        for k, v in section.items()
+    }
+
+def recvall(sock, bufflen):
+    data = bytearray()
+    while True:
+        part = sock.recv(bufflen)
+        data.extend(part)
+        if len(part) < bufflen:
+            # either 0 or end of data
+            return data
+
+# connect to remote server
+def tls_connect(hostname, server):
+    context = ssl.create_default_context()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tls_conn = context.wrap_socket(sock, server_hostname=hostname)
+    tls_conn.connect(server)
+    #set_keepalive_linux(tls_conn) 
+    return tls_conn
+
+def set_keepalive_linux(sock, after_idle_sec=1, interval_sec=3, max_fails=5):
+    """Set TCP keepalive on an open socket.
+
+    It activates after 1 second (after_idle_sec) of idleness,
+    then sends a keepalive ping once every 3 seconds (interval_sec),
+    and closes the connection after 5 failed ping (max_fails), or 15 seconds
+    """
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, after_idle_sec)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, interval_sec)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, max_fails)
+
+def set_keepalive_osx(sock, after_idle_sec=1, interval_sec=3, max_fails=5):
+    """Set TCP keepalive on an open socket.
+
+    sends a keepalive ping once every 3 seconds (interval_sec)
+    """
+    # scraped from /usr/include, not exported by python's socket module
+    TCP_KEEPALIVE = 0x10
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    sock.setsockopt(socket.IPPROTO_TCP, TCP_KEEPALIVE, interval_sec)
 
 # main
 if __name__ == '__main__':
