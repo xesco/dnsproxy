@@ -6,7 +6,6 @@ import selectors
 import socket
 import ssl
 import sys
-import traceback
 
 from base64 import b64encode
 from hashlib import sha256
@@ -22,7 +21,18 @@ class DNSProxy:
         self.remote_server = (self.tls_host, int(self.tls_port))
         self.local_host    = self.local_host or "localhost"
         self.sel           = selectors.DefaultSelector()
-        self.tls_conn      = tls_connect(self.tls_hostname, self.remote_server)
+        # create new tls connection to server
+        self._tls_conn()
+
+    def _tls_conn(self):
+        print("Opening new tls socket...", end=' ')
+        self.tls_conn = tls_connect(self.tls_hostname, self.remote_server)
+        print("Ok!")
+
+    def _create_and_send(self, data):
+        self._tls_conn()
+        self.tls_conn.sendall(data)
+        return recvall(self.tls_conn, self.bufflen)
 
     def get_public_key_hash(self):
         tls_host = (self.tls_host, int(self.tls_port))
@@ -44,6 +54,7 @@ class DNSProxy:
 
     def server_listen(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(self.local_server)
         sock.listen()
         sock.setblocking(False)
@@ -59,11 +70,17 @@ class DNSProxy:
     # registered for connection event read
     def read(self, conn):
         with conn:
+            rcv_data = recvall(conn, self.bufflen)
+            try:
+                self.tls_conn.sendall(rcv_data)
+                tls_data = recvall(self.tls_conn, self.bufflen)
+                if len(tls_data) == 0: # remote socket is closed
+                    tls_data = self._create_and_send(rcv_data)
+            except IOError: # local socket is closed
+                tls_data = self._create_and_send(rcv_data)
+
             print(f"tls conn {self.tls_conn.getsockname()} => {self.tls_conn.getpeername()}")
-            # forward request and get response
-            self.tls_conn.sendall(recvall(conn, self.bufflen))
-            # send response back
-            conn.sendall(recvall(self.tls_conn, self.bufflen))
+            conn.sendall(tls_data)
             self.sel.unregister(conn)
 
     def start(self, validate=True):
@@ -77,12 +94,7 @@ class DNSProxy:
             # block until some connection becomes ready
             for key, mask in self.sel.select():
                 callback = key.data
-                try:
-                    callback(key.fileobj)
-                # never die
-                except Exception as ex:
-                    print(ex)
-                    traceback.print_exc(file=sys.stdout)
+                callback(key.fileobj)
 
 def get_config(inifile):
     config = configparser.ConfigParser()
@@ -105,34 +117,11 @@ def recvall(sock, bufflen):
 
 # connect to remote server
 def tls_connect(hostname, server):
-    context = ssl.create_default_context()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    context = ssl.create_default_context()
     tls_conn = context.wrap_socket(sock, server_hostname=hostname)
     tls_conn.connect(server)
-    #set_keepalive_linux(tls_conn) 
     return tls_conn
-
-def set_keepalive_linux(sock, after_idle_sec=1, interval_sec=3, max_fails=5):
-    """Set TCP keepalive on an open socket.
-
-    It activates after 1 second (after_idle_sec) of idleness,
-    then sends a keepalive ping once every 3 seconds (interval_sec),
-    and closes the connection after 5 failed ping (max_fails), or 15 seconds
-    """
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, after_idle_sec)
-    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, interval_sec)
-    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, max_fails)
-
-def set_keepalive_osx(sock, after_idle_sec=1, interval_sec=3, max_fails=5):
-    """Set TCP keepalive on an open socket.
-
-    sends a keepalive ping once every 3 seconds (interval_sec)
-    """
-    # scraped from /usr/include, not exported by python's socket module
-    TCP_KEEPALIVE = 0x10
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-    sock.setsockopt(socket.IPPROTO_TCP, TCP_KEEPALIVE, interval_sec)
 
 # main
 if __name__ == '__main__':
