@@ -1,4 +1,4 @@
-FROM python:3.7.2-alpine
+FROM python:3.8.5-alpine
 
 # default values at build time (override with --build-arg)
 ARG local_host=

@@ -1,21 +1,21 @@
 # DNSProxy: simple TCP to TLS DNS Proxy server 
-DNS proxy that recieves DNS requests and sends them over TLS. The only requirement is `python3` and `pyOpenSSL`. There's a docker version available which has no dependencies besides docker and docker-compose.
+DNS proxy that recieves plain DNS requests and sends them over TLS. The only requirement is `python3` and `pyOpenSSL`. There's a docker version available which has no dependencies besides docker.
 
 ## Implementation
-This is a toy program. It is not designed to be used as it is for any serious purpose. The proxy acts as a client and as a server. The server waits for connections and at each request spawns a new tls connection to the DNS Server, forwards the original request and sends the response back to the client before closing all connections. The following is a simplified view of what is happining behind the scenes:
+This program is not designed to be used for any production workload, do it at your own risk. The proxy acts as a client and as a server. The following is a simplified view of what is happining behind the scenes:
 
 ```bash
 with conn:
-    data = conn.recv(2048)             # get original request (plaintext)
-    self.tlsconn.sendall(data)         # forward to DNS/TLS Server (encrypted)
+    data = conn.recv(2048)             # get original DNS request (plaintext)
+    self.tlsconn.sendall(data)         # forward request to DNS/TLS Server (encrypted)
     tlsdata = self.tlsconn.recv(2048)  # get response from DNS/TLS Server (encrypted)
-    conn.sendall(tlsdata)              # send response to original client (plaintext)
+    conn.sendall(tlsdata)              # send response back to original client (plaintext)
     self.tlsconn.close().              # close connection
 ```
 
-Python SSL module does certificate validation for us in the funcion [create_defaul_context](https://docs.python.org/3/library/ssl.html#ssl.create_default_context). By default the system's default CA certificates are trusted and hostname validation is set to true. The proxy uses an extra layer of security pinning the DNS Server's public key, decreasing the risk of MITM attacks with forged certificates. If one or several keys are pinned and none of them are used by the server, the proxy will exit with an error.
+Python SSL module does certificate validation in the funcion [create_defaul_context](https://docs.python.org/3.8/library/ssl.html#ssl.create_default_context). By default the client's CA certificates are trusted, and hostname validation is set to `true`. The proxy uses an extra layer of security pinning the DNS Server's public key in the form of SPKI hash ([SSL Pinning](https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning)) decreasing the risk of [MITM](https://en.wikipedia.org/wiki/Man-in-the-middle_attack) attacks with forged certificates. If one or several keys are pinned and none of them match, the proxy will exit with an error.
 
-The proxy also implements I/O Multiplexing that can be used to wait for I/O readiness notification on multiple file objects (in our case sockets). The idea is having a pool of connections and wake upon any on them when data is ready for consumtion. By default sockets are blocking entities and connections are served one after another.
+By default sockets are blocking entities and connections are served linearly one after another. The proxy implements I/O Multiplexing to avoid serving only one request at a time. The idea is having a pool of open connections and serve request while idle sockets are available.
 
 ## Install
 ```bash
@@ -23,15 +23,16 @@ pip install -r requirements.txt
 ```
 
 ## Configuration
-Configuration is done in `settings.ini` and environment variables of the same name (in capitals) have precedence over values defined in the ini file. There is a section for the proxy and another section for the DNS server. The value `local_host=` sets the proxy to listen to all interfaces. The other values are self explanatory. 
+Configuration is done in `settings.ini` and environment variables of the same name (in uppercase) have precedence over values defined in the ini file. There is a section for the proxy `[LOCAL_SERVER]` and another section for the DNS/TLS server `[TLS_SERVER]`.
 
-There is a small script in `utils/spki.sh` to extract the SPKI hash of a public key and the certificate's registered CN name. You can use it to configure an alternative DNS server (check the examples below).
+There is a small script in `utils/spki.sh` to extract the SPKI hash of a public key and the certificate's registered CN name. You can use it to change the defaul Cloudflare DNS/TLS server to something else. For example, to use one of Google's DNS servers, execute the following command and change the ini file accordingly:
+
 ```bash
 cd utils
 ./spki.sh 8.8.8.8 google-dns.pem
-Getting certificate from 8.8.8.8...ok!
-Getting CN...ok!
-Generating fingerprint for google-dns.pem...ok!
+Getting certificate from 8.8.8.8... Ok!
+Getting CN... Ok!
+Generating fingerprint for google-dns.pem... Ok!
 ```
 
 ## Usage
@@ -39,50 +40,52 @@ Generating fingerprint for google-dns.pem...ok!
 You can start the proxy with the default configuration with:
 ```bash
 ./dnsproxy.py
-Local host: *
-Local port: 5353
-Remote host: 1.0.0.1
-Remote port: 853
-Remote hostname: cloudflare-dns.com
-Proxy started!
+local host: localhost
+local port: 5353
+remote host: 1.0.0.1
+remote port: 853
+remote hostname: cloudflare-dns.com
+proxy started!
 ```
 
-Or set up custom config values through env variables:
+Or set up custom config values through environment variables:
 ```bash
-export LOCAL_PORT=5050
-export TLS_HOST=8.8.8.8
-export TLS_HOSTNAME=dns.google
-export SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI=
+export DNSP_LOCAL_PORT=5050
+export DNSP_TLS_HOST=8.8.8.8
+export DNSP_TLS_HOSTNAME=dns.google
+export DNSP_TLS_SPKI=923kRlX3RGb81j3QggeMcfX/MRMzF6VIGv8wCT6WsyI=
 ./dnsproxy
-Local host: *
-Local port: 5050
-Remote host: 8.8.8.8
-Remote port: 853
-Remote hostname: dns.google
+local host: localhost
+local port: 5050
+remote host: 8.8.8.8
+remote port: 853
+remote hostname: dns.google
 Proxy started!
 ```
-You can also edit the `settings.ini` file directly.
 
 ### Docker
-If you prefer to use docker, there is a makefile to assist you. To run the proxy, just type:
+If you want to use docker, there is a makefile to assist you. To run the proxy, just type:
 ```bash
+make build
 make run
 ```
-You can pass the local port to the `make run` command.
+You can pass the host port and the local port to the `make run` command.
 ```bash
-make run LOCAL_PORT=5353
+make run HOST_PORT=5353 DNSP_LOCAL_PORT=53
 ```
 Other variables are passed to docker with `-e` using the `EXTRA_VARS` variable, for example:
 ```bash
-make run LOCAL_PORT=5353 EXTRA_VARS="-e LOCAL_HOST=10.0.0.1"
+make run EXTRA_VARS="-e DNSP_TLS_HOST=8.8.8.8 -e DNSP_TLS_HOSTNAME=dns.google -e DNSP_TLS_SPKI=9OF09YE9udyWAIcbAPu8La8JghFNMarsq1wFuXg1iQA="
 ```
-Run using Google's DNS Server
+Finally you can also bake the variables into the docker image with `docker build` and `--build-arg`.
 ```bash
-make run EXTRA_VARS="-e TLS_HOST=8.8.8.8 -e TLS_HOSTNAME=dns.google -e SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI="
+make build BUILD_ARGS="--build-arg dnsp_local_port=53 --build-arg dnsp_tls_host=1.0.0.1"
 ```
 
 ### Docker Compose
-Because it is not easy to force your OS to use TCP for DNS resolution, there's a `docker-compose` file that starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section.
+You can actually use this program to encrypt all your dns requests. 
+
+ Because it is not easy to force your OS to use TCP for DNS resolution, there's a `docker-compose` file that starts `unbound` on UDP port 53 and forwards all DNS requests to the proxy. More about this in [Testing the proxy](#markdown-header-testing-the-proxy) section.
 
 To start the proxy bundle with compose:
 ```bash
@@ -97,7 +100,7 @@ environment:
   - TLS_HOST=8.8.8.8
   - TLS_PORT=853
   - TLS_HOSTNAME=dns.google
-  - SPKI=c6Oq7DP+27znbdc+OOKxinT6k2k5nvvrkA1eaDfV8EI=
+  - SPKI=9OF09YE9udyWAIcbAPu8La8JghFNMarsq1wFuXg1iQA=
 ```
 
 ## Testing the proxy
@@ -105,16 +108,18 @@ environment:
 Use `dig` to check that requests are being served as expected through the proxy. For example, let's say we started the proxy on port 5353:
 
 ```bash
-dig -4 +tcp @localhost -p5353 -t MX n26.com +short
+dig -4 +tcp @localhost -p5353 -t MX google.com +short
 aspmx.l.google.com.
 alt1.aspmx.l.google.com.
 alt2.aspmx.l.google.com.
 aspmx2.googlemail.com.
 aspmx3.googlemail.com.
 
-dig -4 +tcp @localhost -p5353 -t NS n26.com +short
-amber.ns.cloudflare.com.
-theo.ns.cloudflare.com.
+dig -4 +tcp @localhost -p5353 -t NS google.com +short
+ns2.google.com.
+ns3.google.com.
+ns4.google.com.
+ns1.google.com.
 ```
 With docker, you can check the log with:
 ```bash
@@ -133,23 +138,23 @@ conn closed
 ### Docker Compose
 Start `unbound` and the `proxy` with `docker-compose up -d`. You can find `unbound`'s configuration at `./unbound/unbound.conf`. The most relevant changes to make it work with the proxy are:
 ```bash
-tcp-upstream: yes             # use TCP
+tcp-upstream: yes             # use TCP for the upstream DNS/TLS server
 forward-tls-upstream: no      # Do not use TLS to talk to the proxy
+
+# Enable the dnsproxy server on the configured port
 forward-addr: 172.30.0.2@53   # forward requests to the proxy
 
-# Disable all other servers
+# Comment out the rest of servers
 # Cloudflare
 #forward-addr: 1.1.1.1@853#cloudflare-dns.com
 #forward-addr: 1.0.0.1@853#cloudflare-dns.com
-#forward-addr: 2606:4700:4700::1111@853#cloudflare-dns.com
-#forward-addr: 2606:4700:4700::1001@853#cloudflare-dns.com
 
 # CleanBrowsing
 #forward-addr: 185.228.168.9@853#security-filter-dns.cleanbrowsing.org
 #forward-addr: 185.228.169.9@853#security-filter-dns.cleanbrowsing.org
 ```
 
-Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a small program can forward all your DNS traffic without any problems. Be aware `unbound` caches results and there won't be any output on the logs when querying the same data twice.
+Configure your OS resolver to point to 127.0.0.1 and see the proxy in action. It's quite amazing that such a small program can forward all your DNS traffic without any problems. `unbound` caches results and there won't be any output when requesting the same data twice.
 
 ```bash
 docker-compose-up -d
