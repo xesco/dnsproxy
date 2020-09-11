@@ -8,3 +8,6 @@ unbound/dev/*
 
 # venv
 .env
+
+# vscode
+.vscode

@@ -41,7 +41,7 @@ class DNSProxy:
         return b64encode(digest).decode()
 
     def server_info(self):
-        print(f"local host:      {self.dnsp_local_host}")
+        #print(f"local host:      {self.dnsp_local_host}")
         print(f"local port:      {self.dnsp_local_port}")
         print(f"remote host:     {self.dnsp_tls_host}")
         print(f"remote port:     {self.dnsp_tls_port}")
